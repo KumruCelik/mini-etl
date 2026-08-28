@@ -1,0 +1,50 @@
+[project]
+name = "dev-setup"
+version = "0.1.0"
+description = "uv, ruff, mypy, pytest, pre-commit ve GitHub Actions ile hazır Python proje şablonu"
+readme = "README.md"
+authors = [
+    { name = "KumruCelik", email = "celikumru13@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.2",
+    "pandas>=3.0.5",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.4",
+]
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "C4", "PTH", "RUF"]
+ignore = ["E501"]
+allowed-confusables = ["ı", "İ", "ş", "Ş", "ğ", "Ğ"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_unused_configs = true
+show_error_codes = true
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=src --cov-report=term-missing"
