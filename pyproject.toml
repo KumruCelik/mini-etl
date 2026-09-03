@@ -1,7 +1,7 @@
 [project]
-name = "dev-setup"
+name = "mini-etl"
 version = "0.1.0"
-description = "uv, ruff, mypy, pytest, pre-commit ve GitHub Actions ile hazır Python proje şablonu"
+description = "Generator tabanlı, akış odaklı mini ETL kütüphanesi (sadece stdlib)"
 readme = "README.md"
 authors = [
     { name = "KumruCelik", email = "celikumru13@gmail.com" }

@@ -231,7 +231,7 @@ getirmenin yolu **mutlak bellek yerine ölçekleme davranışına** bakmak:
 kalmalı**, 10 kat artmamalı:
 
 ```python
-assert tepe_10n < tepe_n * 2      # sabit sayılır
+assert tepe_10n < tepe_n * 2  # sabit sayılır
 ```
 
 İkinci bir test, tembelliği doğrudan kanıtlıyor: kaynak olarak **sonsuz** bir

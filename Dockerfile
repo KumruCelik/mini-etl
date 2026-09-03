@@ -13,4 +13,4 @@ COPY --from=builder /app/.venv /app/.venv
 COPY src/ ./src/
 
 ENV PATH="/app/.venv/bin:$PATH"
-CMD ["python", "-m", "dev_setup.main"]
+CMD ["python", "-m", "mini_etl.main"]

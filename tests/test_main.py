@@ -1,4 +1,4 @@
-from dev_setup.main import top_n
+from mini_etl.main import top_n
 
 
 def test_normal():
