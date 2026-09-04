@@ -42,3 +42,11 @@ def virgullu_csv(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return yol
+
+
+@pytest.fixture
+def yas_csv(tmp_path: Path) -> Path:
+    """id, ad, yas sütunlu üç satırlık CSV."""
+    yol = tmp_path / "yas.csv"
+    yol.write_text("id,ad,yas\n1,kumru,22\n2,emre,26\n3,ayse,31\n", encoding="utf-8")
+    return yol
