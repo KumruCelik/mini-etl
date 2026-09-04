@@ -59,3 +59,12 @@ def test_kaynaklar_source_protokolune_uyuyor(ornek_csv: Path, ornek_jsonl: Path)
 
     assert isinstance(json_kaynak, Source)
     assert isinstance(csv_kaynak, Source)
+
+
+def test_jsonl_bos_satirlari_atliyor(tmp_path: Path) -> None:
+    yol = tmp_path / "bosluklu.jsonl"
+    yol.write_text('{"id": "1"}\n\n{"id": "2"}\n', encoding="utf-8")
+
+    kayitlar = list(JsonlSource(yol).oku())
+
+    assert kayitlar == [{"id": "1"}, {"id": "2"}]

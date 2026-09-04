@@ -53,3 +53,14 @@ def test_cli_reddedilen_varsa_bir_donduruyor(girdi: Path, tmp_path: Path) -> Non
 
     assert kod == 1
     assert len(hatalar.read_text(encoding="utf-8").splitlines()) == 3
+
+
+def test_cli_iki_bayrak_zincirleniyor(girdi: Path, tmp_path: Path) -> None:
+    cikti = tmp_path / "c.csv"
+
+    kod = main([str(girdi), str(cikti), "--zorunlu", "yas", "--sec", "id,ad"])
+
+    satirlar = cikti.read_text(encoding="utf-8").splitlines()
+
+    assert kod == 0
+    assert satirlar == ["id,ad", "1,kumru", "3,ayse"]
