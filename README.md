@@ -1,86 +1,111 @@
-# dev-setup
+# mini-etl
 
-[![CI](https://github.com/KumruCelik/dev-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/KumruCelik/dev-setup/actions/workflows/ci.yml)
+CSV ve JSONL dosyalarını **akış hâlinde** okuyup dönüştüren, bozuk kayıtları
+işi durdurmadan kenara ayıran küçük bir ETL kütüphanesi.
 
-Tüm projelerim için standart Python proje şablonu.
+Çekirdek yalnızca Python standart kütüphanesini kullanır.
 
-## Problem
+## Ne yapar
 
-Her yeni projede aynı araç zincirini (lint, test, format, CI) sıfırdan kurmak
-hem zaman kaybı hem de tutarsızlık kaynağı. Projeden projeye komutlar
-değişince "burada testler nasıl çalışıyordu" sorusu her seferinde geri geliyor.
+- **Akış hâlinde çalışır.** Dosyanın tamamı belleğe alınmaz; bellek kullanımı
+  dosya boyutundan bağımsızdır.
+- **Bozuk kayıt işi öldürmez.** Hata veren satır reddedilir, sebebi ve hangi
+  aşamada olduğu kaydedilir, akış kalan kayıtlarla devam eder.
+- **Elemek ile reddetmek ayrılır.** Koşulu sağlamayan kayıt elenir (normal iş);
+  koşulun kendisi patlarsa kayıt reddedilir (arıza). Rapor ikisini ayrı sayar.
+- **Dönüşümler zincirlenir.** `filtrele(...) >> esle(...)`
 
-## Yaklaşım
+## Kurulum
 
-uv (paket yönetimi) + ruff (lint & format) + pytest (test) + pre-commit
-(commit öncesi kontrol) + GitHub Actions (CI) + multi-stage Dockerfile.
-
-Her repoda aynı beş komut çalışır:
-
-```
-make install
-make lint
-make test
-make run
-make docker
-```
-
-## Kullanım
-
-Bu repo GitHub'da template olarak işaretli. Yeni proje açmak için:
-
-```
-gh repo create yeni-proje --public --template KumruCelik/dev-setup --clone
-cd yeni-proje
+```bash
 uv sync --all-extras
-uv run pre-commit install
-make test
 ```
 
-Sonra `pyproject.toml` içindeki `name` alanını ve `src/dev_setup/` klasör
-adını yeni proje adıyla değiştir.
+## Kütüphane olarak
 
-## Sonuç
+```python
+from mini_etl.core.pipeline import Pipeline
+from mini_etl.core.sink import CsvSink
+from mini_etl.core.source import CsvSource
+from mini_etl.core.transform import esle, filtrele
 
-**Testler:**
+rapor = Pipeline(
+    kaynak=CsvSource("girdi.csv"),
+    hedef=CsvSink("cikti.csv"),
+    donusum=filtrele(lambda k: int(k["yas"]) >= 18) >> esle(lambda k: {**k, "yetiskin": True}),
+    hata_dosyasi="hatalar.jsonl",
+).calistir()
 
-```
-tests/test_main.py::test_normal                      PASSED
-tests/test_main.py::test_bos_liste                   PASSED
-tests/test_main.py::test_n_eleman_sayisindan_buyuk   PASSED
-
-3 passed in 0.04s
-```
-
-**Coverage:**
-
-```
-Name                        Stmts   Miss  Cover   Missing
----------------------------------------------------------
-src/dev_setup/__init__.py       2      1    50%   2
-src/dev_setup/main.py           6      0   100%
----------------------------------------------------------
-TOTAL                           8      1    88%
+print(rapor.okunan, rapor.yazilan, rapor.reddedilen)
 ```
 
-**CI:** GitHub Actions'ta lint + test her push'ta çalışıyor, yeşil.
+Reddedilen kayıtlar `hatalar.jsonl` dosyasına satır satır yazılır:
 
-**Docker imajı:** 309 MB (multi-stage, python:3.12-slim, `--no-dev`).
+```json
+{"kayit": {"id": "2", "yas": "abc"}, "hata": "ValueError: ...", "asama": "esle"}
+```
 
-İmajın büyük kısmı numpy + pandas'tan geliyor (~120 MB). Multi-stage build
-temel imajı ve derleme araçlarını kırpıyor ama bağımlılıkların kendisini
-kırpamıyor — imaj çoğunlukla bağımlılıksa optimizasyonu başka yerde aramak
-gerekiyor.
+Dosya yalnızca en az bir kayıt reddedilirse oluşturulur.
 
-## Neyi yapmadım / Sınırlar
+## Komut satırı
 
-- `mypy` strict modda değil. Küçük projede maliyeti getirisinden fazla geldi,
-  proje büyürse açılmalı.
-- Coverage için zorunlu bir eşik yok. Coverage'ı kalite ölçüsü olarak değil,
-  "bu satır hiç çalışmamış" uyarısı olarak kullanıyorum.
-- `__init__.py`'de `uv init`'ten kalan örnek `main()` fonksiyonu duruyor ve
-  test edilmiyor — coverage'daki %88'in sebebi bu.
-- Konteyner root kullanıcısıyla çalışıyor. Üretim için non-root kullanıcı
-  tanımlanmalı.
-- Şablonu yeni projeye uyarlarken isim değişikliği elle yapılıyor. İleride
-  bunu bir script'e bağlamak gerekebilir.
+```bash
+uv run python -m mini_etl.cli girdi.csv cikti.csv --zorunlu yas --sec id,ad
+```
+
+| Seçenek | Ne yapar |
+| --- | --- |
+| `--sec ad,yas` | Yalnızca bu sütunları tutar |
+| `--zorunlu yas` | Bu sütunu boş olan kayıtları eler |
+| `--hatalar h.jsonl` | Reddedilen kayıtları bu dosyaya yazar |
+
+Rapor `stderr`e basılır. Çıkış kodları:
+
+| Kod | Anlamı |
+| --- | --- |
+| `0` | İş tamam, reddedilen yok |
+| `1` | İş tamam, bazı kayıtlar reddedildi |
+| `2` | Kullanım hatası (girdi dosyası yok) — iş hiç başlamadı |
+
+## Bellek davranışı
+
+`scripts/bellek.py` aynı işi iki yöntemle yapıp `tracemalloc` ile tepe belleği
+ölçer.
+
+| Satır | Dosya | Akış (mini-etl) | Hepsini belleğe al | Oran |
+| --- | --- | --- | --- | --- |
+| 20.000 | 0.36 MB | **0.23 MB** | 10.80 MB | 48x |
+| 200.000 | 3.98 MB | **0.23 MB** | 108.17 MB | 479x |
+
+Veri 10 kat arttığında naif yöntemin belleği 10 kat arttı; akışınki değişmedi.
+Fark bir yüzde farkı değil, karmaşıklık farkı: `O(n)` yerine `O(1)`.
+
+Kendin ölçmek için:
+
+```bash
+uv run python scripts/bellek.py --satir 500000
+```
+
+## Tasarım
+
+Tasarım kararları, reddedilen alternatifler ve gerekçeleri
+[DESIGN.md](DESIGN.md) dosyasında.
+
+## Bilinen sınırlar
+
+- Reddedilen kayıtlar bellekte biriktirilip iş sonunda yazılır. Reddedilen
+  oranı çok yüksekse bellek şişer. Doğru çözüm hataları anında akıtmaktır.
+- `CsvSink` sütun başlıklarını **ilk kaydın** anahtarlarından alır. Sonraki
+  kayıtlarda farklı anahtarlar varsa yazım hata verir.
+- Yalnızca CSV yazılabilir. `Sink` protokolü yeni format eklemeyi mümkün kılar
+  (yeni sınıf, ~15 satır, çekirdekte değişiklik yok) ama bu sürümde yapılmadı.
+
+## Geliştirme
+
+```bash
+make install   # bağımlılıklar
+make lint      # ruff check + ruff format --check + mypy
+make test      # pytest
+```
+
+`make lint` yerelde CI ile birebir aynı kontrolleri çalıştırır.
