@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from mini_etl.core.pipeline import Pipeline
@@ -57,3 +58,39 @@ def test_bos_kaynak_sifir_rapor_veriyor(tmp_path: Path) -> None:
 
     assert rapor.okunan == 0
     assert rapor.yazilan == 0
+
+
+def test_bozuk_kayit_akisi_durdurmuyor(tmp_path: Path) -> None:
+    girdi = tmp_path / "girdi.csv"
+    girdi.write_text("id,yas\n1,22\n2,abc\n3,31\n", encoding="utf-8")
+    cikti = tmp_path / "cikti.csv"
+
+    rapor = Pipeline(
+        kaynak=CsvSource(girdi),
+        hedef=CsvSink(cikti),
+        donusum=esle(lambda k: {**k, "yas": str(int(k["yas"]) + 1)}),
+    ).calistir()
+
+    assert rapor.okunan == 3
+    assert rapor.yazilan == 2
+    assert rapor.reddedilen == 1
+
+
+def test_reddedilen_kayitlar_hata_dosyasina_yaziliyor(tmp_path: Path) -> None:
+    girdi = tmp_path / "girdi.csv"
+    girdi.write_text("id,yas\n1,22\n2,abc\n", encoding="utf-8")
+    cikti = tmp_path / "cikti.csv"
+    hatalar = tmp_path / "hatalar.jsonl"
+
+    Pipeline(
+        kaynak=CsvSource(girdi),
+        hedef=CsvSink(cikti),
+        donusum=esle(lambda k: {**k, "yas": str(int(k["yas"]) + 1)}),
+        hata_dosyasi=hatalar,
+    ).calistir()
+
+    satirlar = hatalar.read_text(encoding="utf-8").splitlines()
+
+    assert len(satirlar) == 1
+    assert json.loads(satirlar[0])["kayit"] == {"id": "2", "yas": "abc"}
+    assert json.loads(satirlar[0])["asama"] == "esle"
