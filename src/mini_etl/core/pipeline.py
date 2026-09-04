@@ -33,7 +33,7 @@ class Pipeline:
 
         akis = self._sayarak_oku(rapor)
         if self.donusum is not None:
-            akis = self.donusum(akis)
+            akis = self.donusum(akis, rapor)
 
         rapor.yaz(self.hedef.yaz(akis))
         rapor.sure = time.perf_counter() - baslangic
