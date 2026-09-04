@@ -319,3 +319,74 @@ Testte sahte kaynak yazmak için hiçbir şeyden türetmem gerekmiyor.
 - `tekrarsiz_lazy` tarzı durum tutan transform'lar sabit bellekli değil —
   benzersiz değer sayısıyla büyürler. Bunu belgeleyeceğim.
 - Bellek testi ölçekleme davranışını ölçüyor, mutlak 200 MB iddiasını değil.
+
+---
+
+## Uygulama sonrası notlar
+
+Bu bölüm, tasarım yazıldıktan sonra uygulama sırasında verilen kararları ve
+değişen varsayımları kaydeder. Yukarıdaki kararlar kod yazılmadan önce
+alınmıştı; aşağıdakiler koda dokunurken ortaya çıktı.
+
+### Karar 6 — `JsonlSink`, `SqliteSink` ve `HttpSource` yazılmadı
+
+`JsonlSink` yazmak `CsvSink`'in aynısını farklı bir serileştirme ile yazmak
+demekti: yeni bir tasarım sorunu çözmüyor, yalnızca genişlik ekliyordu.
+`HttpSource` + yeniden deneme mantığı kendi başına ilginç ama bu haftanın
+konusu olan akış ve hata yalıtımı ile ilgisi yok.
+
+Haftanın bütçesi genişlik yerine derinliğe ayrıldı: hata yalıtımı, dead letter
+dosyası ve ölçülmüş bellek davranışı.
+
+`Sink` ve `Source` protokolleri bunları eklemeyi ucuz tutuyor — yeni bir sınıf,
+yaklaşık 15 satır, çekirdekte hiçbir değişiklik yok. Maliyet ertelendi,
+biriktirilmedi.
+
+### Karar 7 — CLI'da `argparse`, `typer` değil
+
+Tasarımda "`cli.py` bağımlılık kullanabilir" denmişti. Uygulamada stdlib'deki
+`argparse` seçildi.
+
+Gerekçe: arayüz iki konumsal argüman ve üç bayraktan ibaret. `typer`ın
+sağladığı kolaylık bu ölçekte ek bağımlılığın maliyetini karşılamıyor.
+Kullanıcı `pip install` etmeden çalışması ayrıca değerli.
+
+Reddedilen alternatif: `typer`. Yirmi komutlu, alt komutlu bir araçta tercih
+edilirdi.
+
+### Tasarımdan sapmalar
+
+| Ne değişti | Neden |
+| --- | --- |
+| `Transform.__call__` imzası `(akis)` → `(akis, rapor)` | Karar 4'te öngörülmüştü, Aşama 2'de uygulandı. Kırıcı değişiklik, `feat(core)!` ile işaretlendi. |
+| `Transform`a `ad` alanı eklendi | Tasarımda yoktu. `HataKaydi.asama` alanını doldurabilmek için gerekti: bir kaydın hangi adımda reddedildiğini bilmeden hata ayıklamak mümkün değil. |
+| CLI'da `--zorunlu` adımı `--sec`ten önce çalışıyor | Ters sırada, seçilmeyen bir sütun zorunlu tutulursa her kayıt `KeyError` alır. Adım sırası sonucu değiştiriyor. |
+
+### Ölçüm: akış iddiası doğrulandı
+
+`scripts/bellek.py`, `tracemalloc` ile tepe belleği ölçüyor.
+
+| Satır | Dosya | Akış | Hepsini belleğe al |
+| --- | --- | --- | --- |
+| 20.000 | 0.36 MB | 0.23 MB | 10.80 MB |
+| 200.000 | 3.98 MB | 0.23 MB | 108.17 MB |
+
+Veri 10 kat arttığında naif yöntemin belleği 10 kat arttı, akışınki değişmedi.
+`O(n)` ile `O(1)` arasındaki fark.
+
+Yan bulgu: 3.98 MB'lık ham CSV, Python nesnelerine dönüşünce 108 MB yer
+kapladı — 27 katı. Bu oran `dict` ve `str` nesnelerinin kabuk maliyetinden
+geliyor ve "dosya küçük, belleğe sığar" tahminlerinin neden yanıldığını
+açıklıyor.
+
+### Güncellenmiş bilinen sınırlar
+
+1. **Reddedilen kayıtlar bellekte birikiyor.** `Rapor.hatalar` bir liste; iş
+   sonunda dosyaya yazılıyor. Reddedilen oranı yüksekse bellek şişer — yani
+   akış garantisi yalnızca *başarılı* kayıtlar için geçerli. Doğru çözüm
+   `Rapor`a bir yazıcı enjekte edip hataları anında akıtmak. Bu sürümde
+   yapılmadı; tipik iş yükünde reddedilen oranı %1'in altında varsayıldı.
+2. **`CsvSink` başlıkları ilk kayıttan alıyor.** Sonraki kayıtlarda farklı
+   anahtar varsa `DictWriter` hata verir. Şema değişkenliğine karşı korumasız.
+3. **Paralellik yok.** Tek süreç, tek çekirdek. Boru hattı yapısı paralelleşmeye
+   uygun ama bu sürümde denenmedi.
