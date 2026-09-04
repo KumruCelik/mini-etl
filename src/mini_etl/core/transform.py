@@ -54,3 +54,27 @@ def filtrele(kosul: Callable[[Record], bool], ad: str = "filtrele") -> Transform
                 yield kayit
 
     return Transform(islem, ad)
+
+
+def dogrula(
+    kosul: Callable[[Record], bool],
+    mesaj: str = "dogrulama basarisiz",
+    ad: str = "dogrula",
+) -> Transform:
+    """Koşulu sağlamayan kaydı reddeder (elemez)."""
+
+    def islem(akis: Iterator[Record], rapor: Rapor) -> Iterator[Record]:
+        for kayit in akis:
+            try:
+                gecerli = kosul(kayit)
+            except Exception as hata:
+                rapor.reddet(kayit, hata, ad)
+                continue
+
+            if not gecerli:
+                rapor.reddet(kayit, ValueError(mesaj), ad)
+                continue
+
+            yield kayit
+
+    return Transform(islem, ad)

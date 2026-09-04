@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from mini_etl.core.record import Rapor, Record
-from mini_etl.core.transform import Transform, esle, filtrele
+from mini_etl.core.transform import Transform, dogrula, esle, filtrele
 
 
 def test_transform_verilen_islemi_calistiriyor() -> None:
@@ -92,3 +92,36 @@ def test_filtrele_elemeyi_reddetmekten_ayiriyor() -> None:
 
     assert len(sonuc) == 1
     assert rapor.reddedilen == 1
+
+
+def test_dogrula_gecerli_kaydi_geciriyor() -> None:
+    rapor = Rapor()
+    donusum = dogrula(lambda k: k["id"] != "")
+
+    sonuc = list(donusum(iter([{"id": "1"}, {"id": "2"}]), rapor))
+
+    assert sonuc == [{"id": "1"}, {"id": "2"}]
+    assert rapor.reddedilen == 0
+
+
+def test_dogrula_gecersiz_kaydi_reddediyor() -> None:
+    rapor = Rapor()
+    donusum = dogrula(lambda k: k["id"] != "", "id bos olamaz")
+
+    sonuc = list(donusum(iter([{"id": "1"}, {"id": ""}]), rapor))
+
+    assert len(sonuc) == 1
+    assert rapor.reddedilen == 1
+    assert rapor.hatalar[0].asama == "dogrula"
+    assert "id bos olamaz" in rapor.hatalar[0].hata
+
+
+def test_dogrula_patlayan_kosulu_reddediyor() -> None:
+    rapor = Rapor()
+    donusum = dogrula(lambda k: k["olmayan"] != "")
+
+    sonuc = list(donusum(iter([{"id": "1"}]), rapor))
+
+    assert sonuc == []
+    assert rapor.reddedilen == 1
+    assert "KeyError" in rapor.hatalar[0].hata
