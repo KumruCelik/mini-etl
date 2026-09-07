@@ -1,9 +1,9 @@
 # mini-etl
 
-CSV ve JSONL dosyalarını **akış hâlinde** okuyup dönüştüren, bozuk kayıtları
-işi durdurmadan kenara ayıran küçük bir ETL kütüphanesi.
+CSV, JSONL ve HTTP kaynaklarını **akış hâlinde** okuyup dönüştüren, bozuk
+kayıtları işi durdurmadan kenara ayıran küçük bir ETL kütüphanesi.
 
-Çekirdek yalnızca Python standart kütüphanesini kullanır.
+`mini_etl.core` yalnızca Python standart kütüphanesini kullanır.
 
 ## Ne yapar
 
@@ -13,7 +13,31 @@ işi durdurmadan kenara ayıran küçük bir ETL kütüphanesi.
   aşamada olduğu kaydedilir, akış kalan kayıtlarla devam eder.
 - **Elemek ile reddetmek ayrılır.** Koşulu sağlamayan kayıt elenir (normal iş);
   koşulun kendisi patlarsa kayıt reddedilir (arıza). Rapor ikisini ayrı sayar.
-- **Dönüşümler zincirlenir.** `filtrele(...) >> esle(...)`
+- **Boru hattı veri olarak tanımlanabilir.** YAML dosyasıyla, kod yazmadan.
+
+## Bileşenler
+
+| Kaynak | Ne yapar |
+| --- | --- |
+| `CsvSource` | CSV dosyasını satır satır okur |
+| `JsonlSource` | Her satırı bir JSON nesnesi olan dosyayı okur |
+| `HttpSource` | HTTP uç noktasından JSON okur; üstel geri çekilmeyle yeniden dener |
+
+| Dönüşüm | Ne yapar |
+| --- | --- |
+| `esle(f)` | Her kayda `f` uygular |
+| `filtrele(kosul)` | Koşulu sağlamayanları **eler** |
+| `dogrula(kosul, mesaj)` | Koşulu sağlamayanları **reddeder** |
+| `yeniden_adlandir(esleme)` | Sütun adlarını değiştirir; çakışmayı reddeder |
+| `tip_cevir(alanlar)` | Alanları verilen fonksiyonla çevirir |
+
+Dönüşümler `>>` ile zincirlenir: `dogrula(...) >> tip_cevir(...)`
+
+| Hedef | Ne yapar |
+| --- | --- |
+| `CsvSink` | CSV dosyasına yazar |
+| `SqliteSink` | SQLite tablosuna parçalar hâlinde yazar |
+| `StdoutSink` | JSONL olarak `stdout`'a yazar |
 
 ## Kurulum
 
@@ -27,12 +51,12 @@ uv sync --all-extras
 from mini_etl.core.pipeline import Pipeline
 from mini_etl.core.sink import CsvSink
 from mini_etl.core.source import CsvSource
-from mini_etl.core.transform import esle, filtrele
+from mini_etl.core.transform import dogrula, tip_cevir
 
 rapor = Pipeline(
     kaynak=CsvSource("girdi.csv"),
     hedef=CsvSink("cikti.csv"),
-    donusum=filtrele(lambda k: int(k["yas"]) >= 18) >> esle(lambda k: {**k, "yetiskin": True}),
+    donusum=dogrula(lambda k: k["id"] != "", "id bos olamaz") >> tip_cevir({"yas": int}),
     hata_dosyasi="hatalar.jsonl",
 ).calistir()
 
@@ -42,10 +66,40 @@ print(rapor.okunan, rapor.yazilan, rapor.reddedilen)
 Reddedilen kayıtlar `hatalar.jsonl` dosyasına satır satır yazılır:
 
 ```json
-{"kayit": {"id": "2", "yas": "abc"}, "hata": "ValueError: ...", "asama": "esle"}
+{"kayit": {"id": "2", "yas": "abc"}, "hata": "ValueError: ...", "asama": "tip_cevir"}
 ```
 
 Dosya yalnızca en az bir kayıt reddedilirse oluşturulur.
+
+## YAML yapılandırma
+
+```yaml
+kaynak:
+  tur: csv          # csv | jsonl | http
+  yol: girdi.csv
+
+donusumler:         # listede yazıldığı sırayla uygulanır
+  - tur: zorunlu
+    sutun: yas
+  - tur: yeniden_adlandir
+    esleme:
+      ad: isim
+  - tur: tip_cevir
+    alanlar:
+      yas: int      # int | float | str | bool
+
+hedef:
+  tur: stdout       # csv | sqlite | stdout
+
+hatalar: bozuk.jsonl
+```
+
+```bash
+uv run python -m mini_etl.cli --config pipeline.yaml
+```
+
+Yapılandırma **veri** olarak okunur: `yaml.safe_load` kullanılır ve tip
+çeviriciler `eval` yerine bir beyaz listeden çözülür.
 
 ## Komut satırı
 
@@ -55,17 +109,38 @@ uv run python -m mini_etl.cli girdi.csv cikti.csv --zorunlu yas --sec id,ad
 
 | Seçenek | Ne yapar |
 | --- | --- |
+| `--config p.yaml` | Boru hattını YAML dosyasından kurar |
 | `--sec ad,yas` | Yalnızca bu sütunları tutar |
 | `--zorunlu yas` | Bu sütunu boş olan kayıtları eler |
 | `--hatalar h.jsonl` | Reddedilen kayıtları bu dosyaya yazar |
+| `--log-seviye` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `--duz-log` | JSON yerine insan okunabilir günlük |
 
-Rapor `stderr`e basılır. Çıkış kodları:
+Çıkış kodları:
 
 | Kod | Anlamı |
 | --- | --- |
 | `0` | İş tamam, reddedilen yok |
 | `1` | İş tamam, bazı kayıtlar reddedildi |
-| `2` | Kullanım hatası (girdi dosyası yok) — iş hiç başlamadı |
+| `2` | Kurulum hatası — iş hiç başlamadı |
+
+## Günlükleme
+
+Günlükler `stderr`'e yazılır. Varsayılan biçim tek satırlık JSON:
+
+```json
+{"zaman": "...", "seviye": "INFO", "mesaj": "bitti", "okunan": 3, "yazilan": 2}
+```
+
+Kütüphane olarak kullanıldığında günlükçü sessizdir; açmak için:
+
+```python
+from mini_etl.gunluk import kur
+
+kur(seviye="DEBUG")
+```
+
+`DEBUG` seviyesinde her reddedilen kayıt ayrı ayrı görünür.
 
 ## Bellek davranışı
 
@@ -80,8 +155,6 @@ Rapor `stderr`e basılır. Çıkış kodları:
 Veri 10 kat arttığında naif yöntemin belleği 10 kat arttı; akışınki değişmedi.
 Fark bir yüzde farkı değil, karmaşıklık farkı: `O(n)` yerine `O(1)`.
 
-Kendin ölçmek için:
-
 ```bash
 uv run python scripts/bellek.py --satir 500000
 ```
@@ -93,19 +166,20 @@ Tasarım kararları, reddedilen alternatifler ve gerekçeleri
 
 ## Bilinen sınırlar
 
-- Reddedilen kayıtlar bellekte biriktirilip iş sonunda yazılır. Reddedilen
-  oranı çok yüksekse bellek şişer. Doğru çözüm hataları anında akıtmaktır.
-- `CsvSink` sütun başlıklarını **ilk kaydın** anahtarlarından alır. Sonraki
-  kayıtlarda farklı anahtarlar varsa yazım hata verir.
-- Yalnızca CSV yazılabilir. `Sink` protokolü yeni format eklemeyi mümkün kılar
-  (yeni sınıf, ~15 satır, çekirdekte değişiklik yok) ama bu sürümde yapılmadı.
+- Reddedilen kayıtlar bellekte biriktirilip iş sonunda yazılır. Akış garantisi
+  yalnızca **başarılı** kayıtlar için geçerli.
+- `HttpSource` yanıtın tamamını belleğe alır; akış garantisi taşımaz.
+- Yeniden denemede jitter yok (thundering herd riski).
+- `CsvSink` ve `SqliteSink` sütunları **ilk kayıttan** alır. Sonraki kayıtlarda
+  farklı anahtarlar varsa yazım hata verir.
+- Paralellik yok: tek süreç, tek çekirdek.
 
 ## Geliştirme
 
 ```bash
 make install   # bağımlılıklar
 make lint      # ruff check + ruff format --check + mypy
-make test      # pytest
+make test      # pytest + kapsam
 ```
 
 `make lint` yerelde CI ile birebir aynı kontrolleri çalıştırır.

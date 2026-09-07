@@ -402,3 +402,60 @@ açıklıyor.
    eklenmedi.
 3. **Yalnızca http/https kabul ediliyor.** `urlopen` aksi hâlde `file://` ile
    yerel dosya okumaya izin verirdi.
+
+---
+
+## Hafta 4 güncellemesi
+
+### Karar 6 geri alındı
+
+Karar 6'da `JsonlSink`, `SqliteSink` ve `HttpSource`'un yazılmadığı ve bunun
+bilinçli bir kapsam kesme olduğu yazılmıştı. Hafta 4'te bu kalemler yazıldı:
+`SqliteSink`, `StdoutSink`, `HttpSource` (+ üstel geri çekilme).
+
+Kesme kararı o hafta için doğruydu — Aşama 1 ve 2 bitmeden genişliğe geçmek
+yanlış olurdu. Ama karar **kalıcı değildi**, ve belge güncellenmeseydi kodla
+çelişirdi. Bir tasarım belgesinin en kötü hâli, gerçeğe uymayan hâlidir.
+
+`JsonlSink` hâlâ yazılmadı: `CsvSink`'in aynısını farklı serileştirmeyle
+yazmak yeni bir şey öğretmiyor, ve `StdoutSink` zaten JSONL üretiyor.
+
+### Karar 8 — YAML yapılandırma çekirdeğin dışında
+
+`yapilandirma.py`, `mini_etl.core` paketinin **dışında**. Sebep: `pyyaml` bir
+bağımlılık, ve Karar 5 çekirdeğin saf stdlib kalmasını şart koşuyor.
+Kütüphaneyi koddan kullanan biri `yaml`a hiç dokunmuyor.
+
+**İki güvenlik kararı:**
+
+1. `yaml.safe_load` kullanılıyor, `yaml.load` değil. İkincisi YAML içindeki
+   özel etiketlerle rastgele Python nesnesi oluşturabilir — yani yapılandırma
+   dosyası kod çalıştırabilir.
+2. Tip çevirici adları (`int`, `float`, `str`, `bool`) `eval` ile değil,
+   `TIPLER` beyaz listesinden çözülüyor. Tanınmayan ad hata veriyor.
+
+Genel ilke: **yapılandırma dosyası veridir, kod değil.** Veriden kod üreten
+hiçbir yol (`eval`, `exec`, `yaml.load`, `pickle`) yapılandırma okurken
+kullanılmaz.
+
+Aynı ilkenin üçüncü uygulaması `SqliteSink`'te: tablo ve sütun adları SQL'de
+parametreleştirilemediği için regex beyaz listesiyle doğrulanıyor.
+
+### Karar 7 korunuyor — `argparse`, `typer` değil
+
+Şartname `typer ile mini-etl run --config pipeline.yaml` diyor. `--config`
+yeteneği eklendi ama ayrıştırıcı `argparse` olarak kaldı. Gerekçe Karar 7'de:
+iki konumsal argüman ve altı bayrak için `typer`ın getirdiği kolaylık ek
+bağımlılığın maliyetini karşılamıyor.
+
+Bu, şartnameden bilinçli ve yazılı bir sapmadır — atlanmış bir madde değil.
+
+### Günlükleme kararları
+
+- Boru hattı özeti `INFO`, tek tek reddedilen kayıtlar `DEBUG` seviyesinde.
+  Milyonlarca reddedilen kayıt `WARNING` seviyesinde yazılsaydı disk dolar ve
+  asıl mesajlar kaybolurdu.
+- Ek alanlar `extra={"ek": {...}}` ile tek anahtar altında toplanıyor;
+  `LogRecord`'un ayrılmış alan adlarıyla çakışma riski yok.
+- Kütüphane varsayılan olarak sessiz: `kur()` çağrılmazsa `mini_etl`
+  günlükçüsünün işleyicisi yok. Kütüphane, kullanıcının çıktısını kirletmez.
