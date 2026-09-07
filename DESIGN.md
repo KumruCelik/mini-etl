@@ -390,3 +390,15 @@ açıklıyor.
    anahtar varsa `DictWriter` hata verir. Şema değişkenliğine karşı korumasız.
 3. **Paralellik yok.** Tek süreç, tek çekirdek. Boru hattı yapısı paralelleşmeye
    uygun ama bu sürümde denenmedi.
+
+### HttpSource'un bilinen sınırları
+
+1. **Yanıtın tamamı belleğe alınıyor.** `json.loads` gövdenin tamamını ister;
+   bu yüzden `HttpSource`, `CsvSource`'un akış garantisini taşımıyor. Doğru
+   çözüm JSONL yanıtı satır satır okumak — bu sürümde yapılmadı.
+2. **Yeniden denemede jitter yok.** Gerçek sistemlerde bekleme süresine
+   rastgele bir sapma eklenir; yoksa aynı anda geri çekilen istemciler aynı
+   anda tekrar vurur (thundering herd). Testleri belirlenimci tutmak için
+   eklenmedi.
+3. **Yalnızca http/https kabul ediliyor.** `urlopen` aksi hâlde `file://` ile
+   yerel dosya okumaya izin verirdi.

@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from mini_etl.core.source import CsvSource, JsonlSource, Source
+import pytest
+
+from mini_etl.core.source import CsvSource, HttpSource, JsonlSource, Source
 
 
 def test_csv_basligi_sutun_adi_olarak_kullaniyor(ornek_csv: Path) -> None:
@@ -68,3 +70,50 @@ def test_jsonl_bos_satirlari_atliyor(tmp_path: Path) -> None:
     kayitlar = list(JsonlSource(yol).oku())
 
     assert kayitlar == [{"id": "1"}, {"id": "2"}]
+
+
+def test_http_source_kayitlari_uretiyor() -> None:
+    def sahte(url: str, zaman_asimi: float) -> bytes:
+        return b'[{"id": "1"}, {"id": "2"}]'
+
+    kaynak = HttpSource("http://ornek", getir=sahte)
+
+    assert list(kaynak.oku()) == [{"id": "1"}, {"id": "2"}]
+
+
+def test_http_source_gecici_hatadan_sonra_basariyor() -> None:
+    cagri = 0
+    beklemeler: list[float] = []
+
+    def sahte(url: str, zaman_asimi: float) -> bytes:
+        nonlocal cagri
+        cagri += 1
+        if cagri < 3:
+            raise OSError("gecici")
+        return b'[{"id": "1"}]'
+
+    kaynak = HttpSource("http://ornek", getir=sahte, bekle=beklemeler.append)
+
+    assert list(kaynak.oku()) == [{"id": "1"}]
+    assert cagri == 3
+    assert beklemeler == [0.5, 1.0]
+
+
+def test_http_source_tum_denemeler_basarisizsa_son_hatayi_veriyor() -> None:
+    cagri = 0
+
+    def sahte(url: str, zaman_asimi: float) -> bytes:
+        nonlocal cagri
+        cagri += 1
+        raise OSError("kalici")
+
+    kaynak = HttpSource("http://ornek", getir=sahte, bekle=lambda _: None)
+
+    with pytest.raises(OSError):
+        list(kaynak.oku())
+
+    assert cagri == 3
+
+
+def test_http_source_protokole_uyuyor() -> None:
+    assert isinstance(HttpSource("http://ornek"), Source)
