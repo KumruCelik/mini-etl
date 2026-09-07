@@ -1,7 +1,15 @@
 from collections.abc import Iterator
 
 from mini_etl.core.record import Rapor, Record
-from mini_etl.core.transform import Transform, dogrula, esle, filtrele
+from mini_etl.core.transform import (
+    Transform,
+    dogrula,
+    esle,
+    filtrele,
+    metinden_bool,
+    tip_cevir,
+    yeniden_adlandir,
+)
 
 
 def test_transform_verilen_islemi_calistiriyor() -> None:
@@ -125,3 +133,70 @@ def test_dogrula_patlayan_kosulu_reddediyor() -> None:
     assert sonuc == []
     assert rapor.reddedilen == 1
     assert "KeyError" in rapor.hatalar[0].hata
+
+
+def test_yeniden_adlandir_sutun_adlarini_degistiriyor() -> None:
+    donusum = yeniden_adlandir({"ad": "isim", "yas": "age"})
+
+    sonuc = list(donusum(iter([{"ad": "kumru", "yas": "22"}]), Rapor()))
+
+    assert sonuc == [{"isim": "kumru", "age": "22"}]
+
+
+def test_yeniden_adlandir_eslemede_olmayani_koruyor() -> None:
+    donusum = yeniden_adlandir({"ad": "isim"})
+
+    sonuc = list(donusum(iter([{"ad": "kumru", "sehir": "elazig"}]), Rapor()))
+
+    assert sonuc == [{"isim": "kumru", "sehir": "elazig"}]
+
+
+def test_yeniden_adlandir_cakismayi_reddediyor() -> None:
+    rapor = Rapor()
+    donusum = yeniden_adlandir({"ad": "isim", "soyad": "isim"})
+
+    sonuc = list(donusum(iter([{"ad": "kumru", "soyad": "celik"}]), rapor))
+
+    assert sonuc == []
+    assert rapor.reddedilen == 1
+    assert rapor.hatalar[0].asama == "yeniden_adlandir"
+
+
+def test_tip_cevir_alani_donusturuyor() -> None:
+    donusum = tip_cevir({"yas": int})
+
+    sonuc = list(donusum(iter([{"ad": "kumru", "yas": "22"}]), Rapor()))
+
+    assert sonuc == [{"ad": "kumru", "yas": 22}]
+
+
+def test_tip_cevir_cevrilemeyeni_reddediyor() -> None:
+    rapor = Rapor()
+    donusum = tip_cevir({"yas": int})
+
+    sonuc = list(donusum(iter([{"yas": "22"}, {"yas": "abc"}]), rapor))
+
+    assert sonuc == [{"yas": 22}]
+    assert rapor.reddedilen == 1
+    assert rapor.hatalar[0].asama == "tip_cevir"
+
+
+def test_tip_cevir_olmayan_sutunu_reddediyor() -> None:
+    rapor = Rapor()
+    donusum = tip_cevir({"olmayan": int})
+
+    sonuc = list(donusum(iter([{"yas": "22"}]), rapor))
+
+    assert sonuc == []
+    assert "KeyError" in rapor.hatalar[0].hata
+
+
+def test_metinden_bool_tanidiklarini_cevirip_digerini_reddediyor() -> None:
+    rapor = Rapor()
+    donusum = tip_cevir({"aktif": metinden_bool})
+    kayitlar = [{"aktif": "evet"}, {"aktif": "0"}, {"aktif": "belki"}]
+
+    sonuc = list(donusum(iter(kayitlar), rapor))
+
+    assert sonuc == [{"aktif": True}, {"aktif": False}]
+    assert rapor.reddedilen == 1

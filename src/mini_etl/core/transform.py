@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterator
+from typing import Any
 
 from mini_etl.core.record import Rapor, Record
 
@@ -78,3 +79,40 @@ def dogrula(
             yield kayit
 
     return Transform(islem, ad)
+
+
+def yeniden_adlandir(esleme: dict[str, str], ad: str = "yeniden_adlandir") -> Transform:
+    """Sütun adlarını verilen eşlemeye göre değiştirir."""
+
+    def cevir(kayit: Record) -> Record:
+        yeni = {esleme.get(sutun, sutun): deger for sutun, deger in kayit.items()}
+        if len(yeni) != len(kayit):
+            raise ValueError("yeniden adlandirma sutun cakismasi yaratti")
+        return yeni
+
+    return esle(cevir, ad)
+
+
+def tip_cevir(
+    donusumler: dict[str, Callable[[str], Any]],
+    ad: str = "tip_cevir",
+) -> Transform:
+    """Belirtilen alanları verilen fonksiyonla dönüştürür."""
+
+    def cevir(kayit: Record) -> Record:
+        yeni = dict(kayit)
+        for sutun, f in donusumler.items():
+            yeni[sutun] = f(kayit[sutun])
+        return yeni
+
+    return esle(cevir, ad)
+
+
+def metinden_bool(deger: str) -> bool:
+    """Metni bool'a çevirir; tanımadığı değerde hata verir."""
+    kucuk = deger.strip().lower()
+    if kucuk in {"1", "true", "evet", "yes"}:
+        return True
+    if kucuk in {"0", "false", "hayir", "no"}:
+        return False
+    raise ValueError(f"bool'a cevrilemedi: {deger!r}")
