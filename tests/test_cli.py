@@ -77,3 +77,27 @@ def test_cli_ozeti_json_gunluk_olarak_yaziyor(
 
     assert govde["mesaj"] == "bitti"
     assert govde["okunan"] == 3
+
+
+def test_cli_config_ile_calisiyor(tmp_path: Path) -> None:
+    girdi = tmp_path / "g.csv"
+    girdi.write_text("id,ad\n1,kumru\n", encoding="utf-8")
+    cikti = tmp_path / "c.csv"
+    ayar = tmp_path / "p.yaml"
+    ayar.write_text(
+        f"kaynak:\n  tur: csv\n  yol: {girdi}\nhedef:\n  tur: csv\n  yol: {cikti}\n",
+        encoding="utf-8",
+    )
+
+    kod = main(["--config", str(ayar)])
+
+    assert kod == 0
+    assert cikti.read_text(encoding="utf-8").splitlines() == ["id,ad", "1,kumru"]
+
+
+def test_cli_olmayan_config_iki_donduruyor(tmp_path: Path) -> None:
+    assert main(["--config", str(tmp_path / "yok.yaml")]) == 2
+
+
+def test_cli_argumansiz_cagri_iki_donduruyor() -> None:
+    assert main([]) == 2
