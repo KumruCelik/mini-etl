@@ -7,6 +7,7 @@ from mini_etl.core.record import Rapor, Record
 from mini_etl.core.sink import Sink
 from mini_etl.core.source import Source
 from mini_etl.core.transform import Transform
+from mini_etl.gunluk import KAYITCI
 
 
 class Pipeline:
@@ -45,6 +46,16 @@ class Pipeline:
         rapor = Rapor()
         baslangic = time.perf_counter()
 
+        KAYITCI.info(
+            "baslangic",
+            extra={
+                "ek": {
+                    "kaynak": type(self.kaynak).__name__,
+                    "hedef": type(self.hedef).__name__,
+                }
+            },
+        )
+
         akis = self._sayarak_oku(rapor)
         if self.donusum is not None:
             akis = self.donusum(akis, rapor)
@@ -52,4 +63,16 @@ class Pipeline:
         rapor.yaz(self.hedef.yaz(akis))
         self._hatalari_yaz(rapor)
         rapor.sure = time.perf_counter() - baslangic
+
+        KAYITCI.info(
+            "bitti",
+            extra={
+                "ek": {
+                    "okunan": rapor.okunan,
+                    "yazilan": rapor.yazilan,
+                    "reddedilen": rapor.reddedilen,
+                    "sure": round(rapor.sure, 4),
+                }
+            },
+        )
         return rapor

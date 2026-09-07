@@ -8,6 +8,7 @@ from mini_etl.core.pipeline import Pipeline
 from mini_etl.core.sink import CsvSink
 from mini_etl.core.source import CsvSource
 from mini_etl.core.transform import Transform, esle, filtrele
+from mini_etl.gunluk import KAYITCI, kur
 
 
 def sutun_sec(sutunlar: list[str]) -> Transform:
@@ -49,15 +50,23 @@ def ayristirici() -> argparse.ArgumentParser:
     p.add_argument("--sec", help="sadece bu sutunlari tut (virgulle ayrilmis)")
     p.add_argument("--zorunlu", help="bu sutunu bos olan kayitlari ele")
     p.add_argument("--hatalar", type=Path, help="reddedilen kayitlar icin JSONL dosyasi")
+    p.add_argument(
+        "--log-seviye",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="gunluk seviyesi",
+    )
+    p.add_argument("--duz-log", action="store_true", help="JSON yerine duz metin")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     """Programı çalıştırır ve çıkış kodunu döndürür."""
     args = ayristirici().parse_args(argv)
+    kur(seviye=args.log_seviye, json_bicim=not args.duz_log)
 
     if not args.girdi.exists():
-        print(f"hata: girdi dosyasi bulunamadi: {args.girdi}", file=sys.stderr)
+        KAYITCI.error("girdi dosyasi bulunamadi", extra={"ek": {"yol": str(args.girdi)}})
         return 2
 
     rapor = Pipeline(
@@ -67,11 +76,6 @@ def main(argv: list[str] | None = None) -> int:
         hata_dosyasi=args.hatalar,
     ).calistir()
 
-    print(
-        f"okunan={rapor.okunan} yazilan={rapor.yazilan} "
-        f"reddedilen={rapor.reddedilen} sure={rapor.sure:.3f}s",
-        file=sys.stderr,
-    )
     return 1 if rapor.reddedilen else 0
 
 

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from mini_etl.gunluk import KAYITCI
+
 Record = dict[str, Any]
 
 
@@ -37,3 +39,4 @@ class Rapor:
         self.hatalar.append(
             HataKaydi(kayit=kayit, hata=f"{type(hata).__name__}: {hata}", asama=asama)
         )
+        KAYITCI.debug("kayit reddedildi", extra={"ek": {"asama": asama}})

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -64,3 +65,15 @@ def test_cli_iki_bayrak_zincirleniyor(girdi: Path, tmp_path: Path) -> None:
 
     assert kod == 0
     assert satirlar == ["id,ad", "1,kumru", "3,ayse"]
+
+
+def test_cli_ozeti_json_gunluk_olarak_yaziyor(
+    girdi: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main([str(girdi), str(tmp_path / "c.csv")])
+
+    son_satir = capsys.readouterr().err.splitlines()[-1]
+    govde = json.loads(son_satir)
+
+    assert govde["mesaj"] == "bitti"
+    assert govde["okunan"] == 3
