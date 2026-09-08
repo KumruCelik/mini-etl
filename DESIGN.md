@@ -459,3 +459,28 @@ Bu, şartnameden bilinçli ve yazılı bir sapmadır — atlanmış bir madde de
   `LogRecord`'un ayrılmış alan adlarıyla çakışma riski yok.
 - Kütüphane varsayılan olarak sessiz: `kur()` çağrılmazsa `mini_etl`
   günlükçüsünün işleyicisi yok. Kütüphane, kullanıcının çıktısını kirletmez.
+
+### Yeniden deneme politikası
+
+`HttpSource` başlangıçta her hatayı tekrar deniyordu (`except Exception`). Bir
+kod incelemesinde (@EmreKaya2000) bunun yanlış olduğu belirtildi ve düzeltildi.
+
+Hatalar iki cinse ayrılıyor:
+
+| Durum | Tekrar denenir | Gerekçe |
+| --- | --- | --- |
+| Bağlantı hatası, zaman aşımı | ✅ | Durum kodu yok — ağ geçici bozuldu |
+| `408`, `425`, `429` | ✅ | Sunucu "biraz sonra gel" diyor |
+| `500`, `502`, `503`, `504` | ✅ | Sunucu tarafı geçici arıza |
+| `400`, `401`, `403`, `404` | ❌ | Kalıcı — tekrar aynı cevabı alır |
+
+Kalıcı hata `raise` ile olduğu gibi yukarı fırlatılır; sarmalanmaz, yığın izi
+korunur.
+
+Bekleme süresi, yanıtta `Retry-After` başlığı varsa **ondan** okunur; yoksa
+üstel geri çekilmeye (`bekleme × 2^deneme`) düşülür. Kendi tahminimizle daha
+kısa beklemek sunucuyu tekrar zorlamak olurdu — sunucu ne zaman hazır olacağını
+bizden iyi bilir.
+
+Durum kodu **yokluğu** geçici hata sayılıyor: bağlantı kurulamadıysa sunucunun
+ne dediğini bilmiyoruz, tekrar denemek makul.

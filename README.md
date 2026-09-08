@@ -21,7 +21,7 @@ kayıtları işi durdurmadan kenara ayıran küçük bir ETL kütüphanesi.
 | --- | --- |
 | `CsvSource` | CSV dosyasını satır satır okur |
 | `JsonlSource` | Her satırı bir JSON nesnesi olan dosyayı okur |
-| `HttpSource` | HTTP uç noktasından JSON okur; üstel geri çekilmeyle yeniden dener |
+| `HttpSource` | HTTP uç noktasından JSON okur; geçici hatalarda (`429`, `5xx`, ağ) yeniden dener, `4xx`'te durur, `Retry-After`'a uyar |
 
 | Dönüşüm | Ne yapar |
 | --- | --- |

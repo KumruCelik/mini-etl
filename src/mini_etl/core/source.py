@@ -8,6 +8,8 @@ from typing import Protocol, runtime_checkable
 
 from mini_etl.core.record import Record
 
+TEKRARLANABILIR_KODLAR = frozenset({408, 425, 429, 500, 502, 503, 504})
+
 
 @runtime_checkable
 class Source(Protocol):
@@ -57,6 +59,30 @@ def _http_getir(url: str, zaman_asimi: float) -> bytes:
         return bytes(cevap.read())
 
 
+def _tekrar_denenir_mi(hata: Exception) -> bool:
+    """Hatanın yeniden denenmeye değer olup olmadığını söyler."""
+    kod = getattr(hata, "code", None)
+    if kod is None:
+        return True  # ag/baglanti hatasi - gecici kabul edilir
+    return int(kod) in TEKRARLANABILIR_KODLAR
+
+
+def _retry_after(hata: Exception) -> float | None:
+    """Yanıttaki Retry-After başlığını saniye olarak döndürür."""
+    basliklar = getattr(hata, "headers", None)
+    if basliklar is None:
+        return None
+
+    deger = basliklar.get("Retry-After")
+    if deger is None:
+        return None
+
+    try:
+        return float(deger)
+    except (TypeError, ValueError):
+        return None
+
+
 class HttpSource:
     """Bir HTTP uç noktasından JSON kayıtları okur."""
 
@@ -76,17 +102,29 @@ class HttpSource:
         self._getir = getir
         self._bekle = bekle
 
+    def _bekleme_suresi(self, hata: Exception, sayac: int) -> float:
+        """Retry-After varsa onu, yoksa üstel geri çekilmeyi kullanır."""
+        sunucudan = _retry_after(hata)
+        if sunucudan is not None:
+            return sunucudan
+
+        # 2**sayac typeshed'de Any doner (2**-1 float verir); int'e bagliyoruz
+        carpan: int = 2**sayac
+        return self.bekleme * carpan
+
     def _dene(self) -> bytes:
-        """Başarısız olursa üstel artan aralıklarla yeniden dener."""
+        """Geçici hatalarda üstel artan aralıklarla yeniden dener."""
         son_hata: Exception = RuntimeError("hic denenmedi")
 
         for sayac in range(self.deneme):
             try:
                 return self._getir(self.url, self.zaman_asimi)
             except Exception as hata:
+                if not _tekrar_denenir_mi(hata):
+                    raise
                 son_hata = hata
                 if sayac < self.deneme - 1:
-                    self._bekle(self.bekleme * (2**sayac))
+                    self._bekle(self._bekleme_suresi(hata, sayac))
 
         raise son_hata
 

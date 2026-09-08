@@ -1,4 +1,6 @@
+from email.message import Message
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 
@@ -117,3 +119,54 @@ def test_http_source_tum_denemeler_basarisizsa_son_hatayi_veriyor() -> None:
 
 def test_http_source_protokole_uyuyor() -> None:
     assert isinstance(HttpSource("http://ornek"), Source)
+
+
+def test_http_source_kalici_hatayi_tekrar_denemiyor() -> None:
+    cagri = 0
+
+    def sahte(url: str, zaman_asimi: float) -> bytes:
+        nonlocal cagri
+        cagri += 1
+        raise HTTPError(url, 404, "bulunamadi", Message(), None)
+
+    kaynak = HttpSource("http://ornek", getir=sahte, bekle=lambda _: None)
+
+    with pytest.raises(HTTPError):
+        list(kaynak.oku())
+
+    assert cagri == 1
+
+
+def test_http_source_sunucu_hatasini_tekrar_deniyor() -> None:
+    cagri = 0
+
+    def sahte(url: str, zaman_asimi: float) -> bytes:
+        nonlocal cagri
+        cagri += 1
+        if cagri < 3:
+            raise HTTPError(url, 503, "mesgul", Message(), None)
+        return b'[{"id": "1"}]'
+
+    kaynak = HttpSource("http://ornek", getir=sahte, bekle=lambda _: None)
+
+    assert list(kaynak.oku()) == [{"id": "1"}]
+    assert cagri == 3
+
+
+def test_http_source_retry_after_basligina_uyuyor() -> None:
+    cagri = 0
+    beklemeler: list[float] = []
+
+    def sahte(url: str, zaman_asimi: float) -> bytes:
+        nonlocal cagri
+        cagri += 1
+        if cagri == 1:
+            basliklar = Message()
+            basliklar["Retry-After"] = "2"
+            raise HTTPError(url, 429, "cok istek", basliklar, None)
+        return b'[{"id": "1"}]'
+
+    kaynak = HttpSource("http://ornek", getir=sahte, bekle=beklemeler.append)
+
+    assert list(kaynak.oku()) == [{"id": "1"}]
+    assert beklemeler == [2.0]
