@@ -144,16 +144,43 @@ kur(seviye="DEBUG")
 
 ## Bellek davranışı
 
-`scripts/bellek.py` aynı işi iki yöntemle yapıp `tracemalloc` ile tepe belleği
-ölçer.
+`scripts/bellek.py` aynı işi iki yöntemle yapar ve her yöntemi **iki bağımsız
+araçla** ölçer:
 
-| Satır | Dosya | Akış (mini-etl) | Hepsini belleğe al | Oran |
-| --- | --- | --- | --- | --- |
-| 20.000 | 0.36 MB | **0.23 MB** | 10.80 MB | 48x |
-| 200.000 | 3.98 MB | **0.23 MB** | 108.17 MB | 479x |
+- `tracemalloc` — yalnızca Python nesneleri, yalnızca bu süreç
+- `ru_maxrss` — işletim sisteminin gördüğü gerçek tepe bellek
 
-Veri 10 kat arttığında naif yöntemin belleği 10 kat arttı; akışınki değişmedi.
-Fark bir yüzde farkı değil, karmaşıklık farkı: `O(n)` yerine `O(1)`.
+Her yöntem **ayrı bir süreçte** çalışır: `ru_maxrss` sürecin tüm ömrü için bir
+yüksek-su işaretidir, aynı süreçte iki yöntem ölçülemez.
+
+| Satır | Dosya | Akış · tracemalloc | Akış · RSS | Liste · tracemalloc | Liste · RSS |
+| --- | --- | --- | --- | --- | --- |
+| 20.000 | 0.36 MB | **0.22 MB** | 17.4 MB | 10.80 MB | 45.1 MB |
+| 200.000 | 3.98 MB | **0.22 MB** | 17.5 MB | 108.17 MB | 288.3 MB |
+
+**Ana bulgu:** veri 10 kat arttığında naif yöntemin belleği 10 kat arttı;
+akışınki **değişmedi** — ve bu, iki aracın ikisinde de böyle görünüyor. Fark
+bir yüzde farkı değil, karmaşıklık farkı: `O(n)` yerine `O(1)`.
+
+**İkinci bulgu:** iki araç aynı sonuca varıyor ama aynı sayıyı vermiyor. İki
+yöntem arasındaki fark `tracemalloc`'a göre 108 MB, `ru_maxrss`'e göre 271 MB.
+`tracemalloc` gerçeğin yaklaşık **%40'ını** gösteriyor ve bu oran her iki
+ölçekte de aynı — sabit bir ek yük değil, orantılı bir sapma.
+
+Sebep: `tracemalloc` *istenen* baytları sayar, işletim sistemi *ayrılan
+sayfaları* verir. Aradaki fark pymalloc'un boyut sınıfına yuvarlamasından,
+1 MB'lık arena tanesinden (bir arena ancak tamamen boşalınca geri verilir) ve
+parçalanmadan geliyor.
+
+Pratik sonuç: `tracemalloc` iki yaklaşımı **karşılaştırmak** için doğru araç,
+**kapasite planlaması** için değil. Saf Python kodunda 2.5 kat iyimser;
+`polars` gibi Rust tabanlı bir kütüphanede sapma 148 kata çıkıyor
+([ölçüm](https://github.com/KumruCelik/perf-lab/blob/main/LOG.md)).
+
+`ru_maxrss`'te **oran** değil **fark** okunmalı: 17.4 MB'lık taban (yorumlayıcı
+ve modüller) her iki yöntemde de var ve oranı bastırıyor.
+
+Kendin ölçmek için:
 
 ```bash
 uv run python scripts/bellek.py --satir 500000
