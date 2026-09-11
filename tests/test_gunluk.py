@@ -62,3 +62,18 @@ def test_duz_bicim_anahtar_deger_yaziyor() -> None:
     KAYITCI.info("bitti", extra={"ek": {"okunan": 3}})
 
     assert tampon.getvalue().strip() == "INFO bitti okunan=3"
+
+
+def test_istisna_bilgisi_ciktiya_giriyor() -> None:
+    tampon = io.StringIO()
+    kur(akis=tampon)
+
+    try:
+        raise ValueError("deneme hatasi")
+    except ValueError:
+        KAYITCI.exception("patladi")
+
+    govde = json.loads(tampon.getvalue())
+
+    assert govde["mesaj"] == "patladi"
+    assert "ValueError: deneme hatasi" in govde["hata"]

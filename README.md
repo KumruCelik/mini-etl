@@ -201,6 +201,21 @@ Tasarım kararları, reddedilen alternatifler ve gerekçeleri
   farklı anahtarlar varsa yazım hata verir.
 - Paralellik yok: tek süreç, tek çekirdek.
 
+## Testler ve kapsam
+
+Kapsam eşiği `pyproject.toml`'da **%98** olarak sabitlenmiş; eşiğin altına düşen
+bir değişiklik testleri kırar. Böylece rakam bir iddia olmaktan çıkıp garanti
+oluyor.
+
+Kapsam dışında kalan tek yer `_http_getir`'in gövdesi: gerçek bir ağ isteği
+yapıyor ve testlerde her zaman sahte bir `getir` enjekte ediliyor. Bu satırlar
+`# pragma: no cover` ile **gizlenmedi** — kapsam dışına almak, o satırların bir
+daha asla sorgulanmayacağı anlamına gelir. Fonksiyon ileride büyürse eklenen
+her satır sessizce denetim dışında kalırdı.
+
+`__main__` blokları hariç tutuldu: pytest modülü import ettiği için o satırlar
+tasarım gereği çalışamaz.
+
 ## Geliştirme
 
 ```bash

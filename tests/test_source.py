@@ -170,3 +170,31 @@ def test_http_source_retry_after_basligina_uyuyor() -> None:
 
     assert list(kaynak.oku()) == [{"id": "1"}]
     assert beklemeler == [2.0]
+
+
+def test_retry_after_sayiya_cevrilemezse_ustel_geri_cekilme() -> None:
+    cagri = 0
+    beklemeler: list[float] = []
+
+    def sahte(url: str, zaman_asimi: float) -> bytes:
+        nonlocal cagri
+        cagri += 1
+        if cagri == 1:
+            basliklar = Message()
+            basliklar["Retry-After"] = "Wed, 21 Oct 2026 07:28:00 GMT"
+            raise HTTPError(url, 429, "cok istek", basliklar, None)
+        return b'[{"id": "1"}]'
+
+    kaynak = HttpSource("http://ornek", getir=sahte, bekle=beklemeler.append)
+
+    assert list(kaynak.oku()) == [{"id": "1"}]
+    assert beklemeler == [0.5]
+
+
+def test_http_source_tek_nesneyi_liste_yapiyor() -> None:
+    def sahte(url: str, zaman_asimi: float) -> bytes:
+        return b'{"id": "1", "ad": "kumru"}'
+
+    kaynak = HttpSource("http://ornek", getir=sahte)
+
+    assert list(kaynak.oku()) == [{"id": "1", "ad": "kumru"}]

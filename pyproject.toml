@@ -50,7 +50,7 @@ warn_unused_configs = true
 show_error_codes = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --cov=src --cov-report=term-missing"
+addopts = "-v --cov=src --cov-report=term-missing --cov-fail-under=98"
 
 [tool.coverage.report]
 # Gerekcesi: __main__ blogu yalnizca dosya dogrudan calistirildiginda isler.
